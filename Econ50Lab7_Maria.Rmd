@@ -1,0 +1,315 @@
+---
+title: "Lab 7 - Maria Kartika"
+author: "Maria Kartika"
+date: "2024-04-02"
+output: pdf_document
+---
+
+```{r}
+rm(list=ls()) # removes all objects from the environment
+cat('\014') # clears the console
+```
+```{r}
+#Set seed for cross validation and random forests
+HUID <- 11647820 #Replace with your HUID
+set.seed(HUID)
+```
+```{r}
+# Install packages (if necessary) and load required libraries
+if (!require(haven)) install.packages("haven"); library(haven)
+if (!require(randomForest)) install.packages("randomForest"); library(randomForest)
+if (!require(rpart)) install.packages("rpart"); library(rpart)
+if (!require(tidyverse)) install.packages("tidyverse"); library(tidyverse)
+```
+```{r}
+#set working directory
+atlas_training<- read_dta("/Users/mariapkartika/Documents/Ec50/Lab 7/atlas_training.dta")
+```
+```{r}
+head(atlas_training)
+
+#Store predictor variables which all start with P_*
+vars <- colnames(atlas_training[,grep("^[P_]", names(atlas_training))])
+
+vars
+
+#Create a training data frame with just predictors P_* and kfr_pooled_pooled_p25
+training <- subset(atlas_training, training==1, vars)
+training$kfr_pooled_pooled_p25 <- atlas_training[atlas_training$training==1,]$kfr_pooled_pooled_p25
+
+```
+## Question 1
+```{r}
+#for loop to find steady state prediction of black children
+generations <- seq(1,7,1)
+parents_rank_black = 32.7 
+for(j in generations){ 
+  kids_rank_black = 25.4 + 0.28 * parents_rank_black
+  print(paste0("In generation ", j, ", parent_rank_black = ", parents_rank_black, ", child_rank_black = ", kids_rank_black))
+  parents_rank_black <- kids_rank_black
+}
+
+```
+```{r}
+#for loop to find steady state prediction of hispanic children
+generations <- seq(1,7,1)
+parents_rank_hisp = 36.17
+for(j in generations){ 
+  kids_rank_hisp <- 36.14 + 0.26 * parents_rank_hisp
+  print(paste0("In generation ", j, ", parent_rank_hisp = ", parents_rank_hisp, ", child_rank_hisp = ", kids_rank_hisp))
+  parents_rank_hisp <- kids_rank_hisp
+}
+```
+For Black children, income rank stabilizes after four generations, and the steady state prediction is 35.3rd percentile.
+
+For Hispanic children, the income rank stabilizes after four generations at the 48.8th percentile. The steady state prediction for Hispanic children is therefore 48.8th percentile because the model predicts no further improvement once average income reaches this level.
+
+## Question 2
+Cross-validation avoids the overfit problem by splitting the dataset into k subsets or "folds," training the model on k-1 folds, and evaluating its performance on the remaining fold. This process is repeated k times, with each fold being used once as the validation set. The final performance score is then calculated by averaging the performance across the k folds. By using cross-validation, we can ensure that the model's performance is generalizable across different subsets of the data and not just optimized for a particular subset. This helps us to avoid overfitting, where a model learns the training data too well and fails to generalize to new, unseen data.
+
+## Question 3
+In the following example, I have changed the starter code to implement five-fold cross validation using the predictor variables **P_68 (percent diabetic adults) and P_76 (percent of persons with limited access to healthy foods).**
+```{r}
+#K-fold Cross validation to select tree depth
+n <- nrow(training) 
+K <- 5 
+B <- seq(1,20,1) 
+
+#create a copy of the training data that we'll use inside the loop
+cv <- training
+
+#define the folds: create a vector of fold memberships (random order)
+cv$foldid <- rep(1:K,each=ceiling(n/K))[sample(1:n)]
+
+#create an empty data frame of results
+#in each iteration of the loop, we fill it in row by row 
+OOS <- data.frame(fold=rep(NA,K*length(B) ), 
+                  squarederror=rep(NA,K*length(B) ), 
+                  maxdepth=rep(NA,K*length(B) )) 
+
+#Start an object row = 0, that will be increased by 1 in each iteration of the loop
+#We'll use that to fill in each row in the data frame
+row <- 0
+
+#Now we run a "double" loop: loop over tree depths 1 through B, loop over folds 1 through K
+
+#This part loops over tree depths
+for(j in B){ 
+  
+  #This part loops over the folds
+  for(k in 1:K){ 
+    
+    #This part increases the "row" by 1 in each iteration of the loop
+    row <- row + 1
+    
+    #This part divides the data into all the folds but one for training
+    #This part uses the k from the inner loop (looping over folds)
+    cvtrain <- subset(cv, foldid != k) 
+    
+    #This part sets the left out fold aside as a separate data frame 
+    #We'll use that to calculate the RMSPE
+    #This part uses the k from the inner loop (looping over folds)
+    cvfold <- subset(cv, foldid == k) 
+    
+    # Now we fit a decision tree on all but fold `k'
+    cvtree <- rpart(kfr_pooled_pooled_p25 ~ P_68 + P_76,
+                    data=cvtrain, 
+                    maxdepth = c(j), 
+                    cp=0) 
+
+    
+    #Get predictions for the left out fold
+    predfull <- predict(cvtree, newdata=cvfold)
+    
+    #Store the sum of squared errors using data in left out fold
+    #It will be put in row 1 in the first iteration, row 2 in the next iteration, etc
+    OOS$squarederror[row] <- sum((cvfold$kfr_pooled_pooled_p25 - predfull)^2) 
+    
+    #Store the depth that was used in the tree in this row of the data frame 
+    OOS$maxdepth[row] <- j 
+    
+    #Store which fold was left out in this row of the data frame 
+    OOS$fold[row] <- k 
+    
+  }
+  
+}
+
+#Summarize the results
+summary(OOS)
+
+```
+```{r}
+#Calculate the combined error across folds
+ssr <- tapply(OOS$squarederror, OOS$maxdepth, sum)
+ssr <- as.data.frame(ssr)
+ssr$maxdepth <- seq(1,20,1)
+ssr
+```
+
+```{r}
+#Calculate the combined error across folds
+ssr <- tapply(OOS$squarederror, OOS$maxdepth, sum)
+ssr <- as.data.frame(ssr)
+ssr$maxdepth <- seq(1,20,1)
+ssr
+
+#Calculate the CV RMSPE as a new variable inside the SSR data frame
+ssr$rmse <- sqrt(ssr$ssr / nrow(training))
+
+#Draw a graph of the cross validation error rate versus the depth of the tree
+ggplot(ssr, aes(x=maxdepth,y=rmse)) +
+  geom_point() +
+  geom_line() +
+  labs(y = "Cross Validation RMSPE",
+       x = "Tree Depth")
+
+ggsave("figure1.png")
+```
+### 3b.
+According to the graph produced above, the tree depth that is optimal is **4**.
+
+### 3c
+```{r}
+#storing optimal tree depth
+cv_optimal_depth = 4
+
+#estimating optimal tree depth using full training data
+tree <- rpart(kfr_pooled_pooled_p25 ~ P_68 + P_76, 
+              data=training, 
+              maxdepth = cv_optimal_depth, 
+              cp=0) 
+
+
+#Visualize the fitted decision tree
+plot(tree, margin = 0.2)
+text(tree, cex = 0.5)
+
+#Save figure
+dev.copy(png,'figure2.png')
+dev.off()
+```
+The predictors used in the first several splits of the tree is P_68 and P_76. In the first and second level of the tree, we see P_68 as the predictor variable, which suggests that this variable has a stronger predictive value compared to the other predictor variable P_76, which only appeared at the third level of the tree.
+
+### 3d
+```{r}
+#Calculate predictions for all rows in training sample
+y_train_predictions_tree <- predict(tree, newdata=training)
+```
+See the code 
+
+## Question 4
+Bagging reduces overfitting and makes the model more robust to noisy data and outliers by training multiple trees on different subsets of the data and combining their predictions. Input randomization increases the diversity of the trees by randomly selecting a subset of features at each node split, reducing correlation between the trees and preventing them from relying too heavily on any one feature. Both techniques improve the performance and generalization of decision trees, and when combined in a random forest, they can create a more robust and accurate model that can generalize well to new, unseen data.
+
+## Question 5
+```{r}
+#random forest using two predictors
+smallforest <- randomForest(kfr_pooled_pooled_p25 ~ P_68 + P_76, 
+                            ntree=1000, 
+                            mtry=2,
+                            data=training)
+
+#Review the Random Forest Results
+smallforest 
+
+```
+```{r}
+#Generate predictions for training data
+y_train_predictions_smallforest <- predict(smallforest, newdata=training, type="response")
+
+```
+See the code
+
+## Question 6
+```{r}
+#random forest using full predictor variable
+mobilityforest <- randomForest(kfr_pooled_pooled_p25 ~ ., 
+                               ntree=1000, 
+                               mtry=121,
+                               importance=TRUE, 
+                               data=training)
+
+#Review the Random Forest Results
+mobilityforest 
+
+```
+```{r}
+#Generate predictions for training data
+y_train_predictions_forest  <- predict(mobilityforest, newdata=training, type="response")
+```
+See the code 
+
+## Question 7
+```{r}
+#determining most important predictor variables
+importance(mobilityforest)
+```
+```{r}
+varImpPlot(mobilityforest, type=1) #Plot the Random Forest Results
+
+#type	is either 1 or 2, specifying the type of importance measure 
+#(1=mean decrease in accuracy, 2=mean decrease in node impurity)
+
+#Save figure
+dev.copy(png,'figure3.png')
+dev.off()
+```
+The most important predictor variables used in this metric is the ones that appear at the top of the figure, namely P_57 (percent of adults that report fair or poor health),  P_37 (share black 2000), and P_56 (mentally unhealthy days per month).
+
+## Question 8
+```{r}
+## Root mean squared prediction error in  the training sample.
+p <- 3
+RMSPE <- matrix(0, p, 1)
+RMSPE[1] <- sqrt(mean((training$kfr_pooled_pooled_p25 - y_train_predictions_tree)^2, na.rm=TRUE))
+RMSPE[2] <- sqrt(mean((training$kfr_pooled_pooled_p25 - y_train_predictions_smallforest)^2, na.rm=TRUE))
+RMSPE[3] <- sqrt(mean((training$kfr_pooled_pooled_p25 - y_train_predictions_forest)^2, na.rm=TRUE))
+
+#Display a table of the results
+data.frame(RMSPE, method = c("Tree", "Small RF", "Large RF"))  
+```
+The Large Random Forest has the smallest Root Mean Squared Prediction Error (0.86%) compared to the other two models, which means it is the best-performing model.
+
+## Question 9
+```{r}
+#Read in data with truth. Truth is kfr_actual in these data
+atlas_test <- read_dta("/Users/mariapkartika/Documents/Ec50/Lab 7/atlas_lockbox.dta")
+
+```
+```{r}
+#Merge with truth to evaluate predictions. 
+atlas <- left_join(atlas_test, atlas_training , by="geoid")
+```
+```{r}
+#Separate test data set as a separate data frame
+test <- subset(atlas, training==0)
+
+```
+```{r}
+#Get predictions for test data
+y_test_predictions_tree <- predict(tree, newdata=test)
+y_test_predictions_smallforest <- predict(smallforest, newdata=test, type="response")
+y_test_predictions_forest  <- predict(mobilityforest, newdata=test, type="response")
+
+```
+```{r}
+#Calculate RMSPE for test data
+p <- 3
+OOS_RMSPE <- matrix(0, p, 1)
+OOS_RMSPE[1] <- sqrt(mean((test$kfr_actual - y_test_predictions_tree)^2, na.rm=TRUE))
+OOS_RMSPE[2] <- sqrt(mean((test$kfr_actual - y_test_predictions_smallforest)^2, na.rm=TRUE))
+OOS_RMSPE[3] <- sqrt(mean((test$kfr_actual - y_test_predictions_forest)^2, na.rm=TRUE))
+
+```
+```{r}
+# Display table of results
+data.frame(OOS_RMSPE, method = c("Tree", "Small RF", "Large RF"))  
+
+```
+Using the lockbox data as a test sample, the Large Random Forest is still the best performing model. The Large RF has the smallest root mean squared prediction error at 2.25% compared to the other two models.
+
+```{r}
+library(knitr)
+purl("Econ50Lab7_Maria.rmd", output = "Econ50Lab7_Maria.r")
+```
+

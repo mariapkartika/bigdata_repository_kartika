@@ -1,0 +1,238 @@
+---
+title: "Econ50 - Lab 2"
+author: "Maria Kartika"
+date: "2024-02-06"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+#clear the workspace
+rm(list=ls()) # removes all objects from the environment
+cat('\014') # clears the console
+
+#Install package and library
+if (!require(haven)) install.packages("haven"); library(haven) 
+if (!require(ggplot2)) install.packages("ggplot2"); library(ggplot2)
+if (!require(tidyverse)) install.packages("tidyverse"); library(tidyverse)
+
+#Change working directory and load stata data set
+setwd("/Users/mariapkartika/Documents/Ec50/Lab2")
+nlsy <- read_dta("nlsy97.dta") 
+```
+
+##Question 1
+```{r}
+#Creating a new dataframe for kids with mothers with high school education or less
+nlsy_mother_ed <- subset(nlsy, mother_education <=12)
+#Calculating the fraction of data frame for kids who went to college
+mean(nlsy_mother_ed$child_college, na.rm=TRUE)
+```
+b) The result is 18.12% which is pretty close with the data from Central Bureau (20.95%) with 2.7% difference. 
+
+##Question 2
+a. Create percentile ranks for kid_income, normalized so the highest rank is 100
+```{r}
+#Create variable in percentile rank
+#Start by rank ordering the data based on the kid_income
+nlsy$kid_income_rank <- rank(nlsy$kid_income)
+
+#Store the maximum rank
+kid_income_max_rank <- max(nlsy$kid_income_rank)
+
+#Normalize the rank, maximum is 100
+nlsy$kid_income_rank <- 100*nlsy$kid_income_rank / kid_income_max_rank
+```
+b. Generate percentile ranks for parent_income
+```{r}
+#Create variable in percentile rank
+#Start by rank ordering the data based on the kid_income
+nlsy$parent_income_rank <- rank(nlsy$parent_income)
+
+#Store the maximum rank
+parent_income_max_rank <- max(nlsy$parent_income_rank)
+
+#Normalize the rank, maximum is 100
+nlsy$parent_income_rank <- 100*nlsy$parent_income_rank / parent_income_max_rank
+```
+
+##Question 3
+Visualize the relationship between child income rank (y-axis) and parent income rank (x-axis) using binned scatter plot
+```{r}
+if (!require(statar)) install.packages("statar"); library(statar)
+
+#Bin scatter plot - connected dots
+ggplot(nlsy,aes(x=parent_income_rank, y=kid_income_rank)) + stat_binmean(n=20, geom ="line") + stat_binmean(n=20, geom="point")
+```
+```{r}
+#Bin scatter plot - linear best fit line
+ggplot(nlsy,aes(x=parent_income_rank, y=kid_income_rank)) + stat_smooth(method="lm", se=FALSE) + stat_binmean(n=20, geom="point")
+```
+
+##Question 4
+Estimate linear regression of kid_income_ranks on parent_income_ranks
+```{r}
+#Estimate linear regression
+mod1 <- lm(kid_income_rank ~ parent_income_rank, data=nlsy) 
+mod1
+```
+Answer: 
+Intercept = 31.4183
+Slope = 0.3728
+
+##Question 5
+Compare the results with the survey data using full population tax data
+a. Statistic 1: Predicted child income rank from the rank-rank regression in question 4 evaluated at rankparent=25
+```{r}
+#Predict child income rank from the regression at parent rank=25 (Absolute mobility)
+0.3728*25+31.4183
+```
+Answer: The predicted child income rank for parent income rank at 25th percentile (absolute mobiity) is 40.7. This is close to the absolute mobility at 25th percentile reported by Chetty et al. (2014) which is 41.3
+
+b. Statistic 2: Relative mobility
+```{r}
+#Relative mobility
+100*0.3728
+```
+Answer: The relative mobility from the data is 37.28. This is close to the relative mobility reported by Chetty et al. (2014) which is 34.1
+
+c. Statistic 3: Probability that a child born to parents in the bottom fifth of the income distribution 
+```{r}
+#Creating a new dataframe for parents in the bottom fifth of income
+nlsy_parent_bottom_fifth <- subset(nlsy, parent_income_rank <=20)
+
+#Create an indicator variable for kids at the top fifth of income distribution 
+nlsy_parent_bottom_fifth$kid_inc_top_fifth <- ifelse(nlsy_parent_bottom_fifth$kid_income_rank > 80,1,0)
+
+#Calculating the fraction of data frame for kids who went to college
+mean(nlsy_parent_bottom_fifth$kid_inc_top_fifth, na.rm=TRUE)
+```
+Answer: The child who was born to parent in the bottom fifth of income and distribution and is succeed to reach to the top fifth of income distribution is 7.37%. This number is close to the number reported by Chetty et.al (2014) which is 7.5%
+
+d. Statistic 4: Fraction of children who make more in dollars than their parents after adjusting inflation
+```{r}
+#Create a new indicator variable for children who make more than their parents
+nlsy$kid_morethan_parent <- ifelse(nlsy$kid_income > nlsy$parent_income * 1.4767, 1, 0)
+#Calculate fraction of children who make more than their parents
+mean(nlsy$kid_morethan_parent, na.rm=TRUE)
+```
+Answer: The fraction of children who make more than their parents after inflation is 36.54%, much lower than what reported by Chetty et.al (2017) in 50% 
+
+##Question 6
+Use the data from Lab 1 
+```{r}
+nls <- read_dta("/Users/mariapkartika/Documents/Ec50/Lab1/nls6679.dta") 
+```
+a. Create percentile ranks for kid_income, normalized so the highest rank is 100
+```{r}
+#Create variable in percentile rank
+#Start by rank ordering the data based on the kid_income
+nls$kid_income_rank_old <- rank(nls$kid_income)
+
+#Store the maximum rank
+kid_income_max_rank_old <- max(nls$kid_income_rank_old)
+
+#Normalize the rank, maximum is 100
+nls$kid_income_rank_old <- 100*nls$kid_income_rank_old / kid_income_max_rank_old
+```
+b. Generate percentile ranks for parent_income
+```{r}
+#Create variable in percentile rank
+#Start by rank ordering the data based on the kid_income
+nls$parent_income_rank_old <- rank(nls$parent_income)
+
+#Store the maximum rank
+parent_income_max_rank_old <- max(nls$parent_income_rank)
+
+#Normalize the rank, maximum is 100
+nls$parent_income_rank_old <- 100*nls$parent_income_rank_old / parent_income_max_rank_old
+```
+c. Estimate linear regression of kid_income_rank_old on parent_income_ranks_old
+```{r}
+#Estimate linear regression
+mod1 <- lm(kid_income_rank_old ~ parent_income_rank_old, data=nls) 
+mod1
+```
+Answer: 
+Intercept = 32.6917
+Slope = 0.3462
+
+d. Predicted child income rank from the rank-rank regression in evaluated at rankparent=25
+```{r}
+#Absolute mobility at the 25th percentile
+0.3462 * 25 + 32.6917
+```
+e. Measure relative mobility
+```{r}
+#Relative Mobility
+100 * 0.3462
+```
+f. Probability that a child born to parents in the bottom fifth of the income distribution 
+```{r}
+#Creating a new dataframe for parents in the bottom fifth of income
+nls_parent_bottom_fifth_old <- subset(nls, parent_income_rank_old <=20)
+
+#Create an indicator variable for kids at the top fifth of income distribution 
+nls_parent_bottom_fifth_old$kid_inc_top_fifth_old <- ifelse(nls_parent_bottom_fifth_old$kid_income_rank_old > 80,1,0)
+
+#Calculating the fraction of data frame for kids who went to college
+mean(nls_parent_bottom_fifth_old$kid_inc_top_fifth_old, na.rm=TRUE)
+```
+g. Fraction of children who make more in dollars than their parents after adjusting inflation
+```{r}
+#Create a new indicator variable for children who make more than their parents
+nls$kid_morethan_parent_old <- ifelse(nls$kid_income_rank_old > nls$parent_income_rank_old * 1.4767, 1, 0)
+#Calculate fraction of children who make more than their parents
+mean(nls$kid_morethan_parent_old, na.rm=TRUE)
+```
+
+Overall answer: The mobility is higher for children who born in 1948-1964, even though that the differences are relatively small compare to the children who born in 1980 (41.34 % vs 40.73%)
+
+##Question 7
+a. The "binned average" compare with linear regression 
+```{r}
+#Create a subset data of parent between 20th and 30th percentile
+nlsy_parent_20_30 <- subset(nlsy, parent_income_rank >20 & parent_income_rank <30)
+
+#Calculate the mean of children income rank for parent income rank between 20 and 30
+mean(nlsy_parent_20_30$kid_income_rank, na.rm=TRUE)
+```
+Answer: The simple “binned average” calculation yields a result of 41.93. This is higher compared to the predicted value or statistic 1 from question 5a (40.7).
+
+b. Calculate statistic of random sample 50 obs using HUID as a seed, then measure the absolute mobility at 25th percentile, linear regression
+```{r}
+#Set seed 
+HUID <- 11647820
+
+#Create data frame with random size of 50
+sample50 <- sample_n(nlsy, 50)
+
+#Calculate the linear regression, n=50
+mod1 <- lm(kid_income_rank ~ parent_income_rank, data = sample50) 
+mod1
+```
+Answer: 
+#Intercept = 37.8702
+#Slope = 0.3993
+```{r}
+#Predict child income rank child for parent rank=25
+0.3993 * 25 + 37.8702
+```
+
+c. Calculate the simple mean of rank child for rank parent between 20 and 30 in the random sampel of 50
+```{r}
+#Calculate mean of rank child for children with rank parent between 20 and 30 for the small randomly selected sample of 50 obs 
+sample50_parent2030 <- subset(sample50, parent_income_rank > 20 & parent_income_rank < 30)
+mean(sample50_parent2030$kid_income_rank)
+```
+
+d. The estimate from the linear regression in question 7b (47.85) has an absolute difference of 6.55 from the full population estimate.However, the average calculated in question 7c (74.58) has a much larger absolute difference of 33.28 from the full population estimate. The estimate from the linear regression in question 7b (47.85) is closer to the full population estimate of 41.3 reported by Chetty et al. (2014) than the average calculated in question 7c.
+
+```{r}
+library(knitr)
+purl("Econ50Lab2Maria.rmd", output = "Econ50Lab2Maria.r")
+
+```
+

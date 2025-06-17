@@ -1,0 +1,218 @@
+---
+title: "Lab 6_Maria Kartika"
+author: "Maria Kartika"
+date: "2024-03-26"
+output: pdf_document
+---
+
+```{r}
+#clear the workspace
+rm(list=ls()) # removes all objects from the environment
+cat('\014') # clears the console
+
+#Install package and library
+if (!require(haven)) install.packages("haven"); library(haven) 
+if (!require(ggplot2)) install.packages("ggplot2"); library(ggplot2)
+if (!require(tidyverse)) install.packages("tidyverse"); library(tidyverse)
+```
+
+```{r}
+#Change working directory and load stata data set
+mobility <- read_dta("/Users/mariapkartika/Documents/Ec50/Lab 6/mobility.dta")
+```
+
+## Question 1
+Splitting data into "test" and "training" datasets is done to address the issue of overfitting, where a machine learning model becomes too complex and starts fitting to noise and outliers in the training data, rather than the underlying patterns in the data that generalize well to new, unseen data. The training data is used to train the model, while the test data is used to evaluate its performance on new, unseen data (in this case, the test data is a "pseudo-new" data). By using a separate test data, we can get a more accurate estimate of how well the model will perform on new data and compare different models to choose the one that performs best. 
+
+## Question 2
+### 2a. Set seed using HUID and assigning random number to each data observation
+```{r}
+HUID <- 11647820 #Replace with your HUID
+set.seed(HUID)
+```
+```{r}
+#create a new indicator variable to assign random number between 0 and 1 to each observation
+mobility$random_number <- runif(length(mobility$cz))
+```
+### 2b. Generate train_flag variable as indicator of training and testing sample
+```{r}
+## Generate a training flag for 50% of the sample
+mobility$train_flag <- ifelse(mobility$random_number>= 0.5, 1, 0) 
+
+#Report number of observations in training and test samples
+sum(mobility$train_flag)
+sum(1-mobility$train_flag)
+```
+There are **374** observations in the **control group** (training sample) and **367** observations in the **treatment group** (test sample).
+
+## Question 3
+### Create new data frame
+```{r}
+## Create some data frames that just contain the training and test data
+test <- subset(mobility, train_flag == 0)
+train <- subset(mobility, train_flag == 1)
+```
+
+## Question 4
+### 4a Estimating a multivariable of kfr_pooled_pooled_p25 and three indicator variables
+```{r}
+#regression of kfr_pooled_pooled_p25 on 3 predictor variables
+mobilityreg <- lm(kfr_pooled_pooled_p25 ~ mean_commutetime2000 + emp2000 + frac_coll_plus2000, data=train) 
+summary(mobilityreg)
+```
+I chose mean_commutetime2000, emp2000, and frac_coll_plus2000 as my indicator variables. From this OLS, I get an intercept of 42.13467, and a slope of -0.55874, 24.68115, and -6.19555 for each indicator variables mentioned before, respectively.
+
+### 4b. Predicting kfr_pooled_pooled_p25 for Milwaukee, WI using OLS
+```{r}
+### Display data for Milwaukee, WI
+summary(subset(mobility, cz == 24100))
+```
+```{r}
+#calculating predicted kfr_pooled_pooled_p25 value
+predicted_kfr <- 42.13476 + -0.55874 * 23.58 + 24.68115 * 0.6491 + -6.19555 * 0.2515
+predicted_kfr
+```
+```{r}
+# Predicted error kfr_pooled_pooled_p25 Milwaukee
+pred_error <- predicted_kfr - 38.89
+pred_error
+```
+The prediction error for Milwaukee is 4.532
+
+### 4c. Obtaining predictions for training data
+```{r}
+#generate predictions for all observations in the training data
+y_train_predictions_ols <- predict(mobilityreg, newdata=train)
+```
+### 4d. Obtaining predictions for test data
+```{r}
+#generate predictions for all observations in the test data
+y_test_predictions_ols <- predict(mobilityreg, newdata=test)
+```
+### 4e. Calculating root mean squared prediction error
+```{r}
+#generate squared prediction errors in test and train data
+OLS_performance_testset <- (test$kfr_pooled_pooled_p25 - y_test_predictions_ols)^2
+OLS_performance_trainset <- (train$kfr_pooled_pooled_p25 - y_train_predictions_ols)^2
+
+#reporting the root mean squared prediction error of test and train data
+rmspe_test_ols <- sqrt(mean(OLS_performance_testset, na.rm=TRUE))
+rmspe_train_ols <- sqrt(mean(OLS_performance_trainset, na.rm=TRUE))
+```
+### 4f. Compare prediction error in test and training data
+```{r}
+rmspe_test_ols
+rmspe_train_ols
+```
+The prediction error in the test data using OLS is **4.685942**, while the prediction error in the training data is **5.426606**. The test data has a higher prediction error than the training data.
+
+## Question 5
+### 5a. Estimate decision tree using similar predictor variables
+```{r}
+if (!require(rpart)) install.packages("rpart"); library(rpart)
+```
+
+```{r}
+mobilitytree <- rpart(kfr_pooled_pooled_p25 ~ mean_commutetime2000 + emp2000 + frac_coll_plus2000, 
+                      data=train, 
+                      maxdepth = 3, 
+                      cp=0) 
+```
+
+### 5b Visualize the Decision Tree
+```{r}
+#Visualize the fitted decision tree
+plot(mobilitytree, margin = 0.2) # plot tree
+text(mobilitytree, cex = 0.5) # add labels to tree
+
+#Save figure
+dev.copy(png,'figure1.png')
+dev.off()
+
+#Apply tree to predict Milwaukee, WI
+summary(subset(mobility, cz == 24100))
+
+```
+```{r}
+#predicted answer using decision tree: 
+pred_kfr_tree <- 43.42202
+
+#predicted error
+pred_error_tree <- pred_kfr_tree - 38.89
+pred_error_tree
+```
+
+The predicted kfr_pooled_pooled_p25 for Milwaukee using the decision tree is 38.89. The prediction error is **4.5302**.
+
+### 5c 5d Prediction for training data and test data
+```{r}
+#Calculate predictions for all rows in test and training samples
+y_test_predictions_tree <- predict(mobilitytree, newdata=test)
+y_train_predictions_tree <- predict(mobilitytree, newdata=train)
+```
+### 5e Calculate the root mean squared prediction error 
+```{r}
+#Generate squared prediction errors
+tree_performance_testset <- (test$kfr_pooled_pooled_p25 - y_test_predictions_tree)^2
+tree_performance_trainset <- (train$kfr_pooled_pooled_p25 - y_train_predictions_tree)^2
+```
+### 5f Compare the prediction error in the test vs the training data
+```{r}
+#Report the root mean squared prediction error
+rmspe_test_tree <- sqrt(mean(tree_performance_testset, na.rm=TRUE))
+rmspe_train_tree <- sqrt(mean(tree_performance_trainset, na.rm=TRUE))
+
+#Report the root mean squared prediction error
+rmspe_test_tree
+rmspe_train_tree
+```
+The prediction error in the test data using decision tree is **4.363907**, while the prediction error in the training data is **4.387537**. The test data has a lower prediction error than the training data.
+
+## Question 6
+```{r}
+#Estimate large tree
+big_tree <-rpart(kfr_pooled_pooled_p25 ~ bowl_per_capita + singleparent_share1990, 
+             data=train, 
+             maxdepth = 30, 
+             cp=0,  
+             minsplit = 1, 
+             minbucket = 1)
+
+#Visualize the fitted decision tree
+plot(big_tree, margin = 0.2) # plot tree
+text(big_tree, cex = 0.5) # add labels to tree
+
+#Save figure
+dev.copy(png,'figure2.png')
+dev.off()
+
+```
+```{r}
+#Calculate predictions for all rows in test and training samples
+y_test_predictions_big_tree <- predict(big_tree, newdata=test)
+y_train_predictions_big_tree <- predict(big_tree, newdata=train)
+
+#Generate squared prediction errors
+big_tree_performance_testset <- (test$kfr_pooled_pooled_p25 - y_test_predictions_big_tree)^2
+big_tree_performance_trainset <- (train$kfr_pooled_pooled_p25 - y_train_predictions_big_tree)^2
+
+#Report the root mean squared prediction error
+rmspe_test_big_tree <- sqrt(mean(big_tree_performance_testset, na.rm=TRUE))
+rmspe_train_big_tree <- sqrt(mean(big_tree_performance_trainset, na.rm=TRUE))
+
+#Report the root mean squared prediction error
+rmspe_test_big_tree
+rmspe_train_big_tree
+```
+The root mean squared prediction error in the test data using this bigger decision tree is **5.07**, while the prediction error in the training data is **0**. The test data has a higher prediction error than the training data. The training data has no prediction error, because this model is overfitted to the training data.
+
+## Question 7
+For the training sample, the big decision tree performs best at 0 prediction error, followed by the smaller tree at 4.387 and the OLS at 5.426. For the test sample, the smaller tree performs best at 4.364 prediction error, followed by the OLS at 4.686 prediction error, and then the bigger tree at 5.067 prediction error.
+
+In the train dataset, the bigger tree performs best because it has overfitted the model to the train dataset, but then when tested on the test dataset, the model has the highest prediction error over the other two models. From this exercise, it seems the smaller decision tree has the best prediction model with least prediction error compared to the other two models.
+
+```{r}
+library(knitr)
+purl("Econ50Lab6Maria.rmd", output = "Econ50Lab6Maria1.r")
+```
+

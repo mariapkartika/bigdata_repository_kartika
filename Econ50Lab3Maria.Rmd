@@ -1,0 +1,218 @@
+---
+title: "Econ50-Lab 3"
+author: "Maria Kartika"
+date: "2024-02-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+#clear the workspace
+rm(list=ls()) # removes all objects from the environment
+cat('\014') # clears the console
+
+#Install package and library
+if (!require(haven)) install.packages("haven"); library(haven) 
+if (!require(ggplot2)) install.packages("ggplot2"); library(ggplot2)
+if (!require(tidyverse)) install.packages("tidyverse"); library(tidyverse)
+```
+```{r}
+#Change working directory and load stata data set
+setwd("/Users/mariapkartika/Documents/Ec50/Lab 3")
+mto <- read_dta("mto.dta") 
+```
+
+##Question 1
+The Moving to Opportunity (MTO) experiment found that moving to low-poverty neighborhoods had significant positive effects on the long-term outcomes of young children (under 13 years old) who participated in the study in 1994-1998. These children had better educational and economic outcomes as adults, including higher rates of college attendance, earnings, and employment. However, for older children and adults, the effects of moving were less clear-cut. Although adults who moved to low-poverty neighborhoods experienced improvements in their health, there were no significant effects on their employment or earnings. Similarly, there were no significant effects on the educational outcomes of older children who moved to low-poverty neighborhoods.
+This led to the conclusions that the effect of treatment is proportional to duration of exposure as well.
+
+##Question 2
+What fraction of individuals in the control group moved? Report the mean of moved for observations with voucher equal to 0
+```{r}
+#Subset for the control group
+control_group <- subset(mto, voucher == 0)
+
+#Fraction of control group who moved
+mean(control_group$moved, na.rm=TRUE)
+```
+Answer: The fraction of control group who moved is 0%
+
+##Question 3
+What fraction of individuals in the experimental group moved?  Report the mean of moved for observations with voucher equal to 1.
+```{r}
+#Subset for the treatment group
+treatment_group <- subset(mto, voucher == 1)
+
+#Fraction of control group who moved
+mean(treatment_group$moved, na.rm=TRUE)
+```
+Answer: The fraction of treatment group who moved is 43%
+
+##Question 4
+What do your results in the previous questions tell us about the compliance rate in the Moving to Opportunity Experiment?  Is there non-compliance, and if so, is it one-sided or two-sided?
+Answer: The control group has a pefect compliance (0%). Meanwhile, the treatment group moved is only 43%, indicating that 57% of the treatment group did not comply with their assignment to move. So, it's one-sided non-compliance
+
+
+```{r}
+#Estimate the linear regression 
+mod1 <- lm(moved ~ voucher, data=mto)
+mod1
+```
+Answer:
+Intercept: -1.323e-14
+Slope: 4.306e-01 (0.4306)
+The control group has a pefect compliance (0%). Meanwhile, the treatment group moved is only 43%, indicating that 57% of the treatment group did not comply with their assignment to move
+
+##Question 5
+What is the sample mean of the Kessler 6 Psychological Distress Index score for individuals in the control group? Report the mean of kessler for observations with voucher equal to 0.
+```{r}
+#Subset for the control group
+control_group_kessler <- subset(mto, voucher == 0)
+
+#Fraction of control group who moved
+mean(control_group_kessler$kessler, na.rm=TRUE)
+```
+
+##Question 6
+What is the sample mean of the Kessler 6 Psychological Distress Index score for individuals in the experimental group? Report the mean of kessler for observations with voucher equal to 1.
+```{r}
+#Subset for the treatment group
+treatment_group_kessler <- subset(mto, voucher == 1)
+
+#Fraction of control group who moved
+mean(treatment_group_kessler$kessler, na.rm=TRUE)
+```
+
+##Question 7
+Estimate a linear regression (regress in stata and lm in R) of kessler on an intercept and voucher.  What is the relationship between the estimated coefficients in the regression and the means that you reported in questions 5-6?
+```{r}
+#Estimate the linear regression 
+mod1 <- lm(kessler ~ voucher, data=mto)
+mod1
+```
+Answer: 
+Intercept (Alpha0): 6.881
+Voucher (Alpha1): -0.588
+
+##Question 8
+Use the regression output from question 7 to report the intent-to-treat effect of the experimental voucher on the Kessler 6 Psychological Distress Index score.
+```{r}
+#Calculate Intent-to-Treat (ITT) effect on an outcome 
+6.881 + -0.588 * 1
+```
+
+##Question 9
+Estimate a linear regression (regress in stata and lm in R) of moved on an intercept and voucher.  Use the regression output to report the compliance rate in the experiment.  Does your estimate match the calculation from question 4?
+```{r}
+#Estimate the linear regression 
+mod1 <- lm(moved ~ voucher, data=mto)
+mod1
+```
+Compliance rate: 4.306% 
+
+##Question 10
+Use your estimates of the compliance rate and the intent-to-treat effect in the previous questions to estimate the treatment-on-the-treated effect of actually using the experimental voucher to move (the variable moved) on the psychological distress index (the variable kessler).  Provide some intuition for the calculation of the TOT estimate.
+```{r}
+#Calculate Treatment-on-the-treated (TOT) effect
+-0.588/0.4306
+```
+##Question 11
+A natural, but incorrect, way of analyzing data from an experiment with non-compliance is to compare outcomes for those who actually received the treatment and those who did not receive the treatment.  Imbens and Rubin (2015) refer to this incorrect analysis as an “As-Treated” analysis. Implement this incorrect approach by calculating the difference in means of kessler for those who moved and those who did not move.
+```{r}
+#As-treated
+#Calculate mean of kessler for those who moved and did not
+tapply(mto$kessler, mto$moved, mean)
+
+```
+
+```{r}
+#Difference in means of those who moved and did not
+6.151515 - 6.677846
+```
+
+
+#Question 12
+Another incorrect way of analyzing data from an experiment with non-compliance is to drop observations in the treatment group that did not receive the treatment (and drop observations from the control group who actually received the treatment if there are any).  Imbens and Rubin (2015) refer to this incorrect analysis as a “Per Protocol” analysis. Implement this incorrect approach by calculating the differences in means for kessler in the experimental treatment versus control group, after excluding observations in the treatment group that did not move (i.e., voucher == 1 & moved == 0).
+```{r}
+#per protocol analysis
+#subset dataframe to exclude those in the treatment group who didn't move
+per_protocol <- subset(mto, !(voucher == 1 & moved == 0))
+#calculate mean of kessler for those who received voucher and didn't
+tapply(per_protocol$kessler, per_protocol$voucher, mean)
+```
+```{r}
+6.151515 - 6.880597
+```
+Answer: Per-protocol effect: -0.729082
+
+##Question 13
+Contrast your (incorrect) “per protocol” and “as treated” estimates with the (correct) treatment-on-the-treated effect estimate you calculated earlier.  Which method yields the biggest estimate?
+
+Answer: The treatment-on-treated (ToT) effect yields the biggest estimate (-1.36) compared to per-protocol (-0.73) and as-treated (-0.53).
+
+
+##Question 14
+Explain why the “per protocol” and “as treated” approaches lead to biased estimates, while the TOT leads to valid inference about the impact of MTO.
+
+Answer: The “per-protocol” and “as-treated” analysis can lead to biased estimates because they can introduce selection bias. This may result in biased estimates of treatment effect, as individuals who did not receive the treatment may be excluded from analysis.
+The Treatment-on-Treated (ToT) approach is more reliable in estimating the true treatment effect because it analyzes data based on the intention-to-treat principle, which means that all individuals are analyzed based on the treatment they were assigned to, regardless of whether they received it. By analyzing the treatment effect based on the original randomization, the ToT approach provides a more accurate estimate of the overall impact of the treatment on the entire sample.
+
+#Question 15
+The most natural way to visualize estimates from a randomized experiment is using a bar graph, with one bar representing the control group and a second bar representing the treatment group.  The height of the bar for the treatment group equals the sum of the control group mean and the ITT or TOT estimate, allowing one to easily judge the magnitude of the treatment effects.  Construct three bar graphs (and include them in your lab write up) to visualize:
+
+a. Bar graph of the fraction of control and treatment group who moved
+```{r}
+#Bar graph
+#Create a data frame with two columns
+df <- data.frame(c(0.1, 0.4), 
+c("Control group", "Treatment group"))  
+
+# Change name of 1st column of df to "Moved"
+names(df)[1] <- "Moved"
+
+# Change name of 2nd column of df to "Group"
+names(df)[2] <- "Group"
+
+# Bar graph displaying results
+ggplot(data=df, aes(x=Group, y=Moved, fill=Group)) +
+  geom_bar(stat="identity", show.legend = FALSE, width=.6) +
+  scale_fill_manual(values=c("red", "blue")) +
+  labs(y = "Moved Using Experimental Voucher", x = "")
+
+```
+b. Bar graph for the mean of kessler in both groups corresponding to the ITT estimate 
+```{r}
+#Create a data frame with two columns
+bar_graph_kessler <- data.frame(c(0.1, 0.4),
+                        c("Control group", "Treatment group"))
+# Change name of 1st column of bar_graph to "Kessler"
+names(bar_graph_kessler)[1] <- "Kessler"
+# Change name of 2nd column of bar_graph to "Group"
+names(bar_graph_kessler)[2] <- "Group"
+# Bar graph displaying results
+ggplot(data=bar_graph_kessler, aes(x=Group, y=Kessler, fill=Group)) +
+  geom_bar(stat="identity", show.legend = FALSE, width=.6) +
+  scale_fill_manual(values=c("red", "blue")) +
+  labs(y = "Kessler Index Score on ITT", x = "")
+```
+c. Bar graph for the mean of kessler in the control group and the adjusted mean in the treatment group corresponding to the treatment-on-treated (ToT) effect
+```{r}
+#Create a data frame with two columns
+bar_graph_kessler_tot <- data.frame(c(0.1, 0.4),
+                                c("Control group", "Treatment group"))
+# Change name of 1st column of bar_graph to "Kessler"
+names(bar_graph_kessler_tot)[1] <- "Kessler"
+# Change name of 2nd column of bar_graph to "Group"
+names(bar_graph_kessler_tot)[2] <- "Group"
+# Bar graph displaying results
+ggplot(data=bar_graph_kessler_tot, aes(x=Group, y=Kessler, fill=Group)) +
+  geom_bar(stat="identity", show.legend = FALSE, width=.6) +
+  scale_fill_manual(values=c("red", "blue")) +
+  labs(y = "Kessler Index Score on TOT", x = "")
+```
+```{r}
+library(knitr)
+purl("Econ50Lab3Maria.rmd", output = "Econ50Lab3Maria.r")
+```

@@ -1,0 +1,383 @@
+---
+title: "Econ50_Lab8_Maria"
+author: "Maria Kartika"
+date: "2024-04-09"
+output: pdf_document
+---
+
+```{r}
+rm(list=ls()) # removes all objects from the environment
+cat('\014') # clears the console
+```
+```{r}
+#Set seed for cross validation and random forests
+HUID <- 11647820 #Replace with your HUID
+set.seed(HUID)
+```
+```{r}
+# Install packages (if necessary) and load required libraries
+if (!require(haven)) install.packages("haven"); library(haven)
+if (!require(randomForest)) install.packages("randomForest"); library(randomForest)
+if (!require(tidyverse)) install.packages("tidyverse"); library(tidyverse)
+```
+```{r}
+dat<- read_dta("/Users/mariapkartika/Documents/Ec50/Lab 8/health.dta")
+```
+```{r}
+#Store health variables from time t-1 which all end with _tm
+all_predictors <- colnames(dat[,grep("^[tm1]", names(dat))])
+all_predictors
+
+#Store predictor variables which all start with P_*, but EXCLUDE race
+race <- c("tm1_dem_black")
+exclude_race <- setdiff(all_predictors,race)
+exclude_race
+```
+## Question 1
+
+Splitting the data into 10% training data set and 90% test data set in random. 
+
+```{r}
+#Define training and test data sets
+#Use a uniformly distributed random number between 0 and 1
+dat$random_number <- runif(length(dat$patient_id))
+
+## Generate a training flag for 10% of the sample
+dat$train_flag <- ifelse(dat$random_number<= 0.1, 1, 0) 
+
+#Report number of observations in training and test samples
+sum(dat$train_flag)
+```
+```{r}
+sum(1-dat$train_flag)
+```
+The training data is 4,900 and test data is 43,884 
+
+```{r}
+##Create some data frames that just contain the training and test data
+
+#Data frame with training data (randomly selected 10% of the data)
+training <- subset(dat, train_flag == 1)
+summary(training)
+
+#Data frame with test data (remaining 90% of the data)
+test <- subset(dat, train_flag == 0)
+summary(test)
+```
+
+## Question 2
+### 2a. Random forest to predict **patient cost excluding race**
+```{r}
+#creating random forest to predict cost excluding race
+mod1 <- randomForest(reformulate(exclude_race, "cost_t"), 
+                     ntree=100, 
+                     mtry=149,
+                     importance=TRUE, 
+                     data=training)
+#random forest result
+mod1
+```
+```{r}
+#generate predictions for all observations in test and training samples
+y_test_predictions_mod1 <- predict(mod1, newdata=test)
+y_train_predictions_mod1 <- predict(mod1, newdata=training)
+
+#Variable importance
+importance(mod1)
+varImpPlot(mod1, type=1) #Plot the Random Forest Results
+dev.copy(png,'mod1_importance.png')
+dev.off()
+```
+The highest predictor for the random forest prediction model of patient cost excluding race is the **PULMONARY CIRCULATION DISORDERS (tm1_pulmcirc_elixhauser)**
+
+### 2b. Random forest to **predict patient cost including race**
+```{r}
+#creating forest to predict cost including race
+mod2 <- randomForest(reformulate(all_predictors, "cost_t"), 
+                     ntree=100, 
+                     mtry=150,
+                     importance=TRUE, 
+                     data=training)
+
+#review the Random Forest Results
+mod2 
+```
+```{r}
+#generate predictions for all observations in test and training samples
+y_train_predictions_mod2 <- predict(mod2, newdata=training)
+y_test_predictions_mod2 <- predict(mod2, newdata=test)
+
+#Variable importance
+importance(mod2)
+varImpPlot(mod2, type=1) #Plot the Random Forest Results
+dev.copy(png,'mod2_importance.png')
+dev.off()
+```
+The highest predictor for the random forest prediction model of patient cost including race is the **PULMONARY CIRCULATION DISORDERS (tm1_pulmcirc_elixhauser) **
+
+### 2c. Random forest prediction of **patient health excluding race**
+```{r}
+#creating forest to predict health excluding race
+mod3 <- randomForest(reformulate(exclude_race, "gagne_sum_t"), 
+                        ntree=100, 
+                        mtry=149,
+                        importance=TRUE,
+                        data=training)
+
+#review the Random Forest Results
+mod3 
+
+```
+
+```{r}
+#generate predictions for all observations in test and training samples
+y_test_predictions_mod3 <- predict(mod3, newdata=test)
+y_train_predictions_mod3 <- predict(mod3, newdata=training)
+
+
+#Variable importance
+importance(mod3)
+varImpPlot(mod3, type=1) #Plot the Random Forest Results
+dev.copy(png,'mod3_importance.png')
+dev.off()
+```
+The highest predictor for the random forest prediction model of health cost excluding race is the variable **tm1_gagne_sum (total number of active illnesses)**
+
+### 2d. Random forest prediction of **patient health including race**
+```{r}
+#creating forest to predict health including race
+mod4 <- randomForest(reformulate(all_predictors, "gagne_sum_t"), 
+                     ntree=100, 
+                     mtry=150,
+                     importance=TRUE,
+                     data=training)
+
+#review the Random Forest Results
+mod4 
+```
+
+
+```{r}
+#generate predictions for all observations in test and training samples
+y_train_predictions_mod4 <- predict(mod4, newdata=training)
+y_test_predictions_mod4 <- predict(mod4, newdata=test)
+
+#Variable importance
+importance(mod4)
+varImpPlot(mod4, type=1) #Plot the Random Forest Results
+dev.copy(png,'mod4_importance.png')
+dev.off()
+```
+The highest predictor for the random forest prediction model of health cost including race is the variable **tm1_gagne_sum (total number of active illnesses)**
+
+## Question 3
+### Calculate and compare RMSPE in training sample
+```{r}
+## Root mean squared prediction error in  the training sample.
+p <- 4
+RMSPE <- matrix(0, p, 1)
+
+## Model 1
+RMSPE[1] <- sqrt(mean((training$cost_t - y_train_predictions_mod1)^2, na.rm=TRUE))
+
+## Model 2
+RMSPE[2] <- sqrt(mean((training$cost_t - y_train_predictions_mod2)^2, na.rm=TRUE))
+
+## Model 3 
+RMSPE[3] <- sqrt(mean((training$gagne_sum_t - y_train_predictions_mod3)^2, na.rm=TRUE))
+
+## Model 4
+RMSPE[4] <- sqrt(mean((training$gagne_sum_t - y_train_predictions_mod4)^2, na.rm=TRUE))
+```
+```{r}
+#Display a table of the results
+data.frame(algorithm = c("Model 1 - Costs (excl. race) ", 
+                             "Model 2 - Costs (incl. race) ",
+                             "Model 3 - Health (excl. race)",
+                             "Model 4 - Health (incl. race)"),
+           RMSPE)
+```
+In the training sample, the model which predicts "health" has a significantly lower prediction error compared to the model which predicts "cost". The RMSPE doesn't differ much between similar labels including and excluding race.
+
+## Question 4
+### Calculate and compare RMSPE in test sample
+```{r}
+#root mean squared prediction error in the test sample
+p <- 4
+RMSPE_OOS <- matrix(0, p, 1)
+
+## Model 1
+RMSPE_OOS[1] <- sqrt(mean((test$cost_t - y_test_predictions_mod1)^2, na.rm=TRUE))
+
+## Model 2
+RMSPE_OOS[2] <- sqrt(mean((test$cost_t - y_test_predictions_mod2)^2, na.rm=TRUE))
+
+## Model 3
+RMSPE_OOS[3] <- sqrt(mean((test$gagne_sum_t - y_test_predictions_mod3)^2, na.rm=TRUE))
+
+## Model 4
+RMSPE_OOS[4] <- sqrt(mean((test$gagne_sum_t - y_test_predictions_mod4)^2, na.rm=TRUE))
+
+
+#Display a table of the results
+data.frame(algorithm = c("Model 1 - Costs (excl. race) ", 
+                         "Model 2 - Costs (incl. race) ",
+                         "Model 3 - Health (excl. race)",
+                         "Model 4 - Health (incl. race)"),
+           RMSPE_OOS)
+```
+In the test sample, the model which predicts "health" has a significantly lower prediction error compared to the model which predicts "cost". The RMSPE doesn't differ much between similar labels including and excluding race.
+
+## Question 5
+Exporting the test data set and predictions.
+```{r}
+#Export data set with training data + predictions from the models
+lab8 <- test
+
+lab8$y_test_predictions_mod1 <- y_test_predictions_mod1
+lab8$y_test_predictions_mod2 <- y_test_predictions_mod2
+lab8$y_test_predictions_mod3 <- y_test_predictions_mod3
+lab8$y_test_predictions_mod4 <- y_test_predictions_mod4
+
+write_dta(lab8, "lab8_2024_results.dta")
+```
+
+## Question 6
+Creating percentile ranks of prediction results from the four prediction models.
+```{r}
+#creating a new variable to rank predictions
+lab8$pred_rank_mod1 <- rank(lab8$y_test_predictions_mod1)
+lab8$pred_rank_mod2 <- rank(lab8$y_test_predictions_mod2)
+lab8$pred_rank_mod3 <- rank(lab8$y_test_predictions_mod3)
+lab8$pred_rank_mod4 <- rank(lab8$y_test_predictions_mod4)
+
+
+#Store the maximum rank
+max_rank_mod1 <- max(lab8$pred_rank_mod1)
+max_rank_mod2 <- max(lab8$pred_rank_mod2)
+max_rank_mod3 <- max(lab8$pred_rank_mod3)
+max_rank_mod4 <- max(lab8$pred_rank_mod4)
+max_rank_mod1
+max_rank_mod2
+max_rank_mod3
+max_rank_mod4
+
+#Normalize rank so that maximum is 100
+lab8$percentile_rank_mod1 <- 100*lab8$pred_rank_mod1 / max_rank_mod1
+lab8$percentile_rank_mod2 <- 100*lab8$pred_rank_mod2 / max_rank_mod2
+lab8$percentile_rank_mod3 <- 100*lab8$pred_rank_mod3 / max_rank_mod3
+lab8$percentile_rank_mod4 <- 100*lab8$pred_rank_mod4 / max_rank_mod4
+
+
+```
+## Question 7
+### 7a. Creating indicator variable for risk score > 55
+```{r}
+#creating indicator variables for risk score > 55
+lab8$eligible_mod1 <- ifelse(lab8$percentile_rank_mod1 > 55, 1, 0)
+lab8$eligible_mod2 <- ifelse(lab8$percentile_rank_mod2 > 55, 1, 0)
+lab8$eligible_mod3 <- ifelse(lab8$percentile_rank_mod3 > 55, 1, 0)
+lab8$eligible_mod4 <- ifelse(lab8$percentile_rank_mod4 > 55, 1, 0)
+```
+
+### 7b. Number of Black patients eligible for the program for all four models
+```{r}
+#Subset data for black patients
+lab8_black <- subset(lab8, tm1_dem_black == 1)
+
+#Report mean for four models
+mean(lab8_black$eligible_mod1, na.rm=TRUE)
+mean(lab8_black$eligible_mod2, na.rm=TRUE)
+mean(lab8_black$eligible_mod3, na.rm=TRUE)
+mean(lab8_black$eligible_mod4, na.rm=TRUE)
+```
+The fraction of Black patients eligible for this program according to model 1, 2, 3, and 4 are 50.4%, 52.8%, 58.9%, and 58.9% respectively.
+
+### 7c. Fraction of Black patients among patients eligible for the program
+```{r}
+#Subset data for eligible patients
+lab8_eligible_mod1 <- subset(lab8, eligible_mod1 == 1)
+lab8_eligible_mod2 <- subset(lab8, eligible_mod2 == 1)
+lab8_eligible_mod3 <- subset(lab8, eligible_mod3 == 1)
+lab8_eligible_mod4 <- subset(lab8, eligible_mod4 == 1)
+
+#Report mean for four models
+mean(lab8_eligible_mod1$tm1_dem_black, na.rm=TRUE)
+mean(lab8_eligible_mod2$tm1_dem_black, na.rm=TRUE)
+mean(lab8_eligible_mod3$tm1_dem_black, na.rm=TRUE)
+mean(lab8_eligible_mod4$tm1_dem_black, na.rm=TRUE)
+```
+The fraction of Black patients among patients eligible for the program according to models 1, 2, 3 and 4 are 12.7%, 13.4%, 14.9%, and 14.9% respectively.
+
+## Question 8
+```{r}
+#install ggplot and statar packages
+if (!require(tidyverse)) install.packages("tidyverse"); library(tidyverse)
+if (!require(ggplot2)) install.packages("ggplot2"); library(ggplot2)
+if (!require(statar)) install.packages("statar"); library(statar)
+```
+```{r}
+#Bin scatter plot – connected dots model 1 for cost
+ggplot(lab8, aes(x = percentile_rank_mod1  , y = cost_t, color = race)) +
+  stat_binmean(n = 20, geom = "line") + 
+  stat_binmean(n = 20, geom = "point")
+```
+```{r}
+#Bin scatter plot – connected dots model 2 for cost
+ggplot(lab8, aes(x = percentile_rank_mod2  , y = cost_t, color = race)) +
+  stat_binmean(n = 20, geom = "line") + 
+  stat_binmean(n = 20, geom = "point")
+
+```
+
+```{r}
+#Bin scatter plot – connected dots model 3 for cost
+ggplot(lab8, aes(x = percentile_rank_mod3  , y = cost_t, color = race)) +
+  stat_binmean(n = 20, geom = "line") + 
+  stat_binmean(n = 20, geom = "point")
+
+```
+```{r}
+#Bin scatter plot – connected dots model 4 for cost
+ggplot(lab8, aes(x = percentile_rank_mod4  , y = cost_t, color = race)) +
+  stat_binmean(n = 20, geom = "line") + 
+  stat_binmean(n = 20, geom = "point")
+
+```
+```{r}
+#Bin scatter plot – connected dots model 1 for health
+ggplot(lab8, aes(x = percentile_rank_mod1  , y = gagne_sum_t, color = race)) +
+  stat_binmean(n = 20, geom = "line") + 
+  stat_binmean(n = 20, geom = "point")
+```
+```{r}
+#Bin scatter plot – connected dots model 2 for health
+ggplot(lab8, aes(x = percentile_rank_mod2  , y = gagne_sum_t, color = race)) +
+  stat_binmean(n = 20, geom = "line") + 
+  stat_binmean(n = 20, geom = "point")
+```
+```{r}
+#Bin scatter plot – connected dots model 3 for health
+ggplot(lab8, aes(x = percentile_rank_mod3  , y = gagne_sum_t, color = race)) +
+  stat_binmean(n = 20, geom = "line") + 
+  stat_binmean(n = 20, geom = "point")
+
+```
+```{r}
+#Bin scatter plot – connected dots model 4 for health
+ggplot(lab8, aes(x = percentile_rank_mod4  , y = gagne_sum_t, color = race)) +
+  stat_binmean(n = 20, geom = "line") + 
+  stat_binmean(n = 20, geom = "point")
+
+```
+
+## Question 9
+According to Professor Ziad Obermeyer, the source of bias in algorithms are labels, not predictors. This is because the predictors (x-axis) are actually just algorithm scores, that is, the score that the algorithm assigned to patients, a prediction of how they're going to be treated by the health system, which is not necessarily the truth. However, the "label" or y-axis is actually what ends up happening. Two people with the same algorithm score who are treated the same way turned out to have very different health needs, with Black patients having higher health needs on average.
+
+Based on the binned scatter plots generated using my analysis above, I concur with Professor Obermeyer that the "labels" are the source of bias instead of the predictors. After analyzing the scatter plots, we can see that including or excluding race as a predictor variable does not significantly affect the accuracy of the models. The real difference in accuracy lies when we change the "labels" or outcomes, namely "health" and "cost". Therefore, the source of bias in algorithms is the labels, rather than the predictors.
+
+```{r}
+library(knitr)
+purl("Econ50_Lab8_Maria.rmd", output = "Econ50_Lab8_Maria.r")
+```
+

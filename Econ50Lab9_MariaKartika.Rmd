@@ -1,0 +1,221 @@
+---
+title: "Econ50_Lab 9_Maria Kartika"
+author: "Maria Kartika"
+date: "2024-04-16"
+output: pdf_document
+---
+
+```{r}
+#clear the workspace
+rm(list=ls()) # removes all objects from the environment
+cat('\014') # clears the console
+
+```
+```{r}
+# Install packages (if necessary) and load required libraries
+if (!require(tidyverse)) install.packages("tidyverse"); library(tidyverse)
+if (!require(haven)) install.packages("haven"); library(haven)
+if (!require(rdrobust)) install.packages("rdrobust"); library(rdrobust)
+if (!require(sandwich)) install.packages("sandwich"); library(sandwich)
+if (!require(lmtest)) install.packages("lmtest"); library(lmtest)
+if (!require(rdrobust)) install.packages("rdrobust"); library(rdrobust)
+
+```
+```{r}
+#set working directory
+setwd("/Users/mariapkartika/Documents/Ec50/Lab 9")
+
+#load dataset
+holc <- read_dta("holc.dta")
+```
+
+# Question 1
+## 1a. Binned scatter plot to show that the likelihood of having a HOLC map drawn changes discontinuously if a city’s 1930 population exceeds 40,000 residents
+```{r}
+#Create running variable, centered at 1930 population = 40000 
+holc$dist_from_cut <- holc$pop_1930 - 40000
+
+#Subset data to observations in year 1930
+holc1930 <- subset(holc,year==1930)
+```
+```{r}
+#draw binned scatter plot with linear fit
+rdplot(holc1930$holc_map, 
+       holc1930$dist_from_cut, 
+        p = 1, 
+        nbins = c(20, 20), 
+        binselect = "es", 
+        y.lim = c(0, 1.1), 
+        x.label = "City Population in 1930 minus 40,000", 
+        y.label = "HOLC Map"
+       )
+
+```
+## 1b. Binned scatter plots to test for smoothness of 2-3 city characteristics measured in a pre-treatment year across the 40,000 residents threshold. I chose to look at the year 1930.
+```{r}
+#draw binned scatter plot with linear fit
+rdplot(holc1930$ownhome, 
+       holc1930$dist_from_cut, 
+        p = 1, 
+        nbins = c(20, 20), 
+        binselect = "es", 
+        y.lim = c(0, 1.1), 
+        x.label = "City Population in 1930 minus 40,000", 
+        y.label = "Home Ownership Rate"
+       )
+```
+```{r}
+#draw binned scatter plot with linear fit
+rdplot(holc1930$shraa, 
+       holc1930$dist_from_cut, 
+        p = 1, 
+        nbins = c(20, 20), 
+        binselect = "es", 
+        y.lim = c(0, 1.1), 
+        x.label = "City Population in 1930 minus 40,000", 
+        y.label = "Share African American"
+       )
+
+```
+```{r}
+#draw binned scatter plot with linear fit
+rdplot(holc1930$employment, 
+       holc1930$dist_from_cut, 
+        p = 1, 
+        nbins = c(20, 20), 
+        binselect = "es", 
+        y.lim = c(0, 1.1), 
+        x.label = "City Population in 1930 minus 40,000", 
+        y.label = "Employment Rate"
+       )
+```
+## 1c. 
+Based on the graphs above, the regression discontinuity research design showed that in 1930, city characteristics such as Home Ownership rate, Share of African American, and Employment Rate are similar below and above the threshold of 40,000 residents, or in other words, there are no discontinuity. The validity of the regression discontinuity research design using the 40,000 residents threshold appears to be appropriate for this study.
+
+## 1d. Binned scatter plot to evaluate whether homeownership rates pooling all the data from 1940 to 2010 changes discontinuously if a city’s 1930 population exceeds 40,000 residents
+```{r}
+#Subset data to observations in years 1940-2010
+holc1940to2010 <- subset(holc,year<=2010 & year>=1940)
+```
+```{r}
+#draw binned scatter plot with linear fit
+rdplot(holc1940to2010$ownhome, 
+       holc1940to2010$dist_from_cut, 
+        p = 1, 
+        nbins = c(20, 20), 
+        binselect = "es", 
+        y.lim = c(0, 1.1), 
+        x.label = "City Population in 1930 minus 40,000", 
+        y.label = "Home Ownership Rate"
+       )
+```
+Again, the binned scatter plot above did not show any discontinuity in the home ownership rate above and below the threshold.
+
+# Question 2
+```{r}
+#Create indicator for treated city
+holc$treat <- ifelse(holc$pop_1930>40000, 1, 0)
+holc1940to2010$above <- ifelse(holc1940to2010$pop_1930>40000, 1, 0)
+```
+```{r}
+#create interaction variable
+holc1940to2010$interaction <- holc1940to2010$above * holc1940to2010$dist_from_cut
+```
+```{r}
+#Estimate regression
+linear <- lm(ownhome ~ above + dist_from_cut + interaction, data = holc1940to2010)
+```
+```{r}
+#Report coefficients and standard errors
+coeftest(linear, vcovCL(linear, cluster = holc1940to2010$city_id))
+
+```
+The regression discontinuity coefficient of HOLC maps on home ownership rate is **-0.020823**. This suggests that the presence of a HOLC map in a city is associated with a decrease of approximately 2.08 percentage points in the homeownership rate. 
+
+However, it is important to note that the coefficient is not statistically significant at conventional significance levels (e.g., 0.05), which indicates that we cannot conclude with high confidence that there is a causal effect of HOLC maps on homeownership rates.
+
+# Question 3
+##3a. Average homeownership rates in 1910 through 2010 for cities with 1930s populations below the 40,000 population threshold and cities above the 40,000 population threshold
+```{r}
+#Bin scatter plot – connected dots
+ggplot(holc, 
+       aes(x=year,y=ownhome, 
+           colour = factor(treat, labels = c("1930 pop < 40K", "1930 pop > 40K")), 
+           shape = factor(treat, labels = c("1930 pop < 40K", "1930 pop > 40K")))) +
+  geom_vline(xintercept=1935) +
+  stat_summary(fun = "mean",geom="point") +
+  stat_summary(fun = "mean",geom="line")  +
+  labs(x = "Year", y = "Home Ownership Rate", shape = "", colour = "") +
+  theme(legend.position="bottom")
+
+#Save graph
+ggsave("binscatter_connected.png")
+
+```
+##3b.
+Based in the graph above, the parallel identification assumption is satisfied. The two lines for population in 1930 < 40K and population in 1930 > 40k is parallel.
+
+# Question 4
+```{r}
+#mean home ownership rate in the years 1910 to 1930 in the treatment group cities with 1930 population above 40,000 residents
+with(subset(holc, treat == 1 & year >= 1910 & year <= 1930), mean(ownhome, na.rm=TRUE))
+
+#mean home ownership rate in the years 1940 to 1960 in the treatment group cities with 1930 population above 40,000 residents
+with(subset(holc, treat == 1 & year >= 1940 & year <= 1960), mean(ownhome, na.rm=TRUE))
+
+#mean home ownership rate in the years 1910 to 1930 in the control group cities with 1930 population below 40,000 residents
+with(subset(holc, treat == 0 & year >= 1910 & year <= 1930), mean(ownhome, na.rm=TRUE))
+
+#mean home ownership rate in the years 1940 to 1960 in the control group cities with 1930 population below 40,000 residents
+with(subset(holc, treat == 0 & year >= 1940 & year <= 1960), mean(ownhome, na.rm=TRUE))
+```
+The difference in differences using the mean here can be calculated as follows:
+```{r}
+(0.5036633 - 0.4454177) - (0.5225899 - 0.4328921)
+```
+The difference in differences using mean is **-0.0314522**.
+
+# Question 5
+```{r}
+#Create indicator for after HOLC maps drawn
+holc$post <- ifelse(holc$year>=1940, 1, 0)
+```
+```{r}
+#Interact treat and post
+holc$dd <- holc$treat*holc$post
+```
+```{r}
+#Data frame with subset of years and new variables generated
+dat_narrow <- subset(holc, year>=1910 & year <= 1960)
+```
+```{r}
+#Estimate regression (all goes on one line)
+reg1 <- lm(ownhome ~ dd + post + treat, data=dat_narrow)
+```
+```{r}
+#Report coefficients and standard errors
+coeftest(reg1, vcovCL(reg1, cluster = dat_narrow$city_id))
+
+```
+The coefficient of the difference in differences regression above is **-0.0314523**, which is equal to the difference in differences computed using the means of treatment and control groups in question 4.
+
+# Question 6
+```{r}
+#Estimate regression (all goes on one line)
+reg2 <- lm(ownhome ~ dd + factor(year) + factor(city_id), 
+           data=dat_narrow)
+
+#Report coefficients and standard errors
+coeftest(reg2, vcovCL(reg2, cluster = dat_narrow$city_id))
+
+```
+The coefficient of the difference in differences regression using the year and city indicator variables is **-0.032502**, which is almost similar with the coefficient in the questions 4 and 5. This suggests that the introduction of HOLC maps is associated with a decrease of approximately 3.25 percentage points in the homeownership rate in the treated cities compared to the control cities.
+
+# Question 7
+Both the regression discontinuity and difference in differences analyses suggest a negative association between HOLC maps and homeownership rates, but the causal evidence is not definitive. The RDD analysis lacks statistical significance, which limits our ability to draw confident conclusions, while the DiD analysis relies on the parallel trends assumption. 
+
+```{r}
+library(knitr)
+purl("Econ50Lab9_MariaKartika.rmd", output = "Econ50Lab9_MariaKartika.r")
+```
+

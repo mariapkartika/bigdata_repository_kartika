@@ -1,0 +1,233 @@
+---
+title: "Econ 50 - Lab 5"
+author: "Maria Kartika"
+date: "2024-02-27"
+output: pdf_document
+---
+
+```{r}
+#clear the workspace
+rm(list=ls()) # removes all objects from the environment
+cat('\014') # clears the console
+
+#Install package and library
+if (!require(haven)) install.packages("haven"); library(haven) 
+if (!require(ggplot2)) install.packages("ggplot2"); library(ggplot2)
+if (!require(tidyverse)) install.packages("tidyverse"); library(tidyverse)
+```
+```{r}
+#Change working directory and load stata data set
+setwd("/Users/mariapkartika/Documents/Ec50/Lab 5")
+dat <- read_dta("probation.dta") 
+```
+
+## Question 1
+Answer: Because if comparing all students who are not on probation vs who are on probation will also include the confounding characteristics that these two groups might have. Whereas if we compare the students just directly below and above the threshold, we assume that they would have almost similar characteristics (hence the use of an RD design).
+
+## Question 2
+Answer: In Regression Discontinuity Design (RDD), the "running variable" is a variable that determines the assignment of observations to either the treatment group or the control group based on a cutoff point. This design is used in situations where the treatment assignment is determined by whether the value of the running variable falls above or below a certain threshold. In this case, the running variable is **GPA**
+
+## Question 3
+a. Binned scatter plots to check for smoothness of 2-3 predetermined characteristics
+```{r}
+#Load packages
+if (!require(tidyverse)) install.packages("tidyverse"); library(tidyverse)
+if (!require(rdrobust)) install.packages("rdrobust"); library(rdrobust)
+
+#Create running variable, centered at GPA = 1.60 
+dat$dist_from_cut <- dat$GPA - 1.6
+
+#Subset data to observations in [-1.2, 1.2]
+dat_narrow <- subset(dat,dist_from_cut <=1.2 & dist_from_cut >=-1.2)
+
+summary(dat_narrow$hsgrade_pct)
+```
+```{r}
+#draw binned scatter plot for high school grade
+rdplot(dat_narrow$hsgrade_pct, #outcome variable
+       dat_narrow$dist_from_cut, #running variable
+        p = 1, 
+        nbins = c(20, 20), 
+        binselect = "es", 
+        y.lim = c(17, 57), 
+        x.label = "Grade Point Average minus 1.6", 
+        y.label = "High School Grade Percentile"
+       )
+
+```
+
+```{r}
+###predetermined characteristic totcredits_year1
+#summary characteristic totcredits
+summary(dat_narrow$totcredits_year1)
+```
+```{r}
+#draw binned scatter plot for Total Credit Year 1
+rdplot(dat_narrow$totcredits_year1, #outcome variable
+       dat_narrow$dist_from_cut, #running variable
+        p = 1, 
+        nbins = c(20, 20), 
+        binselect = "es", 
+        y.lim = c (4, 5),
+        x.label = "Grade Point Average minus 1.6", 
+        y.label = "Total Credit Year 1 Percentile"
+       )
+
+```
+```{r}
+###predetermined characteristic english
+#summary characteristic english
+summary(dat_narrow$english)
+```
+```{r}
+#draw binned scatter plot for English
+rdplot(dat_narrow$english, #outcome variable
+       dat_narrow$dist_from_cut, #running variable
+        p = 1, 
+        nbins = c(20, 20), 
+        binselect = "es", 
+        y.lim = c(0,1), 
+        x.label = "Grade Point Average minus 1.6", 
+        y.label = "English"
+       )
+
+```
+
+b. Histograms to check for a spike in the density just above or just below the threshold.  Use at least 200 bins
+
+```{r}
+ggplot(dat) +  geom_histogram(aes(x=GPA, y=..density..))
+```
+```{r}
+#Use 200 bins, overriding default
+ggplot(dat) +  geom_histogram(aes(x=GPA, y=..density..), bins = 200)
+
+```
+
+
+## Question 4
+Q: Now study the effect of the academic probation policy on an outcome of your choice, such as on-time graduation.  Start with a graphical analysis replicating the example in Figure 1 below, focusing on students within +/- 1.2 grade points of the 1.60 GPA threshold.  That is, use a bandwidth of 1.2 grade points.  Include your graph in your solutions.
+```{r}
+####Binscatter plot for outcome: next GPA
+summary(dat_narrow$nextGPA)
+```
+
+```{r}
+#draw binned scatter plot for GPA
+rdplot(dat_narrow$nextGPA, #outcome variable
+       dat_narrow$dist_from_cut, #running variable
+        p = 1, 
+        nbins = c(20, 20), 
+        binselect = "es", 
+        y.lim = c(1.810, 3.010), 
+        x.label = "Grade Point Average minus 1.6", 
+        y.label = "GPA"
+       )
+```
+Answer: For this question, I chose next term GPA (nextGPA) as my outcome of choice. If we look at the threshold, the next term GPA of students just below the threshold (i.e., student on probation) are higher compared to students just above the threshold (not on probation). This may be because the students on probation might be more motivated to pull up their GPA by working harder in the next term.
+
+## Question 5
+Quantify any discontinuities
+a. Estimate a linear regression of the outcome variable on the running variable, but restrict the data to only observations that are to left of threshold with GPA < 1.6 and GPA >= 0.4
+
+```{r}
+setwd("/Users/mariapkartika/Documents/Ec50/Lab 5")
+dat <- read_dta("probation.dta") 
+
+# subsetting data below the threshold
+dat_narrow_below <- subset(dat, GPA >= 0.4 & GPA < 1.6)
+
+# Estimate regression 
+reg_below <- lm(nextGPA ~ GPA, data = dat_narrow_below)
+coef_below <- coef(reg_below)
+
+# predicted value at GPA 1.60
+predicted_value_below_gpa_16 <- coef_below["(Intercept)"] + coef_below["GPA"] * 1.60
+predicted_value_below_gpa_16
+
+```
+
+b. Run a separate regression of the outcome variable on the running variable, but restrict the data to only observations that are to the right of the threshold with GPA >= 1.6 and GPA <= 2.8
+```{r}
+# subsetting data below the threshold
+dat_narrow_above <- subset(dat, GPA >= 1.6 & GPA <= 2.8)
+
+# Estimate regression 
+reg_above <- lm(nextGPA ~ GPA, data = dat_narrow_above)
+coef_above <- coef(reg_above)
+
+# predicted value at GPA 1.60
+predicted_value_above_gpa_16 <- coef_above["(Intercept)"] + coef_above["GPA"] * 1.60
+predicted_value_above_gpa_16
+```
+c. Calculate the difference in predicted values in a. and b.  Recall from Lab 2 that this is called a predicted effect.  Include your calculation in your solutions.
+```{r}
+# predicted effect
+predicted_effect <- predicted_value_above_gpa_16 - predicted_value_below_gpa_16
+predicted_effect
+```
+
+## Question 6
+
+Measuring the difference using multivariable regression:
+```{r}
+install.packages("sandwich", repos = "https://cloud.r-project.org/" )
+install.packages("lmtest", repos = "https://cloud.r-project.org/")
+
+```
+```{r}
+library(lmtest)
+library(sandwich)
+```
+
+```{r}
+#Generate indicator for being above probation threshold
+dat$above <- 0
+dat$above[which(dat$dist_from_cut >= 0)] <- 1
+
+#Create running variable, centered at GPA = 1.60 
+dat$dist_from_cut <- dat$GPA - 1.6
+
+#Generate interaction term for linear
+dat$interaction <- dat$dist_from_cut * dat$above 
+
+##Subset data to [-1.2,1.2] with new variables added
+dat_narrow <- subset(dat,dist_from_cut<=1.2 & dist_from_cut>=-1.2)
+
+# Estimate regression
+linear <- lm(nextGPA ~ above + dist_from_cut + interaction, data = dat_narrow)
+coef_linear <- coeftest(linear, vcov = vcovHC(linear, type = "HC1"))
+
+# Coefficient of interest is the coefficient on 'above' = indicator for being above probat
+coef_above_q6 <- coef_linear[2, 1]
+predicted_effect
+
+if (!"dist_from_cut" %in% names(dat)) stop("dist_from_cut not found")
+```
+
+## Question 7
+Using the standard error on the coefficient RD from the regression in the previous question, what do you conclude about the statistical significance of the discontinuity at the threshold?
+```{r}
+#Standard error of above: 0.027193 
+#Measure 95% confidence interval 
+-0.238891 + 1.96 * 0.027193
+```
+
+```{r}
+#Result= -0.1855927
+-0.238891 - 1.96 * 0.027193
+```
+The 95% confidence interval for the regression coefficient is -0.2921893 to -0.1855927. Since the 95% confidence interval did not contain zero, then we can conclude that the discontinuity at the threshold is statistically significant.
+
+## Question 8
+Putting together all the analyses you did above, what do you conclude about the effectiveness of this college’s academic probation program? What caveats would you put on your conclusions?  
+
+Answer:
+The analysis indicates that the college’s academic probation program is effective in increasing the next term GPA for students just below the probation threshold. The negative coefficient of the ‘above’ variable (-0.238891) suggests that students slightly above the threshold have a lower next term GPA compared to those below it. A plausible explanation is that students on probation may be more motivated to improve their academic performance, seeking academic support or making other positive changes, while students just above the threshold might not feel the same urgency.
+However, there are some caveats to consider when interpreting this finding. The results are specific to this college and program, and may not be generalizable. The focus on next term GPA as the outcome variable might not capture the full impact of the program on students’ long-term success. Finally, unobserved factors influencing the relationship between the probation threshold and next term GPA may not be accounted for in the analysis.
+
+```{r}
+library(knitr)
+purl("Econ50Lab5Maria.rmd", output = "Econ50Lab5Maria1.r")
+```
+
